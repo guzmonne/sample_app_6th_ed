@@ -1,6 +1,6 @@
+.git
 Dockerfile
 docker-compose.yml
-tmp/
 node_modules/
 .env
 BUILD.md

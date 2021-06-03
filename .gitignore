@@ -41,6 +41,8 @@ yarn-debug.log*
 db/test.*
 
 # Custom gitignore
+.bundle/
+vendor/cache/
 .env
 server.key
 server.csr

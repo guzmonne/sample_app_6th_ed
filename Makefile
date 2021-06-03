@@ -7,9 +7,13 @@ ifneq (,$(wildcard ./.env))
 	export
 endif
 # Load the value of the ruby version beign used as an environment variable
-RUBY_VERSION=`cat .ruby-version`
+RUBY_VERSION=$(shell cat .ruby-version)
 # Set the current working dir
-PWD=`pwd`
+PWD=$(shell pwd)
+# Set the GEM directory
+GEM_HOME=/usr/local/bundle
+# Set the default Docker Network
+DOCKER_NETWORK?=bridge
 ################################################################################
 # Target: clear
 # Clear the terminal.
@@ -18,30 +22,75 @@ PWD=`pwd`
 clear:
 	clear
 ################################################################################
-# Target: build
-# Build a new version of the project image. It will be tagged with the current
-# version of the project. The base image will use the version of Ruby defined
-# on the `.ruby-version` file at the root of this project.
+# Target: bundle
+# Allows to run custom `bundle` commands inside the `build` application.
+# Example: make bundle ARGS="locak --update"
 ################################################################################
-.PHONY: build
-build: clear
-	@DOCKER_BUILDKIT=1 docker build -t ${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} \
+.PHONY: run
+run:
+	@echo "${STAGE} - $(CMD)"
+	@docker run --rm -ti \
+		-v ${PWD}:/usr/src/myapp \
+		-w /usr/src/myapp \
+		--network ${DOCKER_NETWORK} \
+		--env-file ./.env \
+		${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION}-${STAGE} $(CMD)
+################################################################################
+# Target: exec
+# Runs a container from the created image and executes into it.
+# Can be used to troubleshoot problems inside the image.
+################################################################################
+.PHONY: exec
+exec: clear
+	@echo docker exec --it ${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} /bin/sh
+	@docker run --rm -ti \
+		-v ${PWD}:/usr/src/myapp \
+		--env-file ./.env \
+		${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} /bin/sh
+################################################################################
+# Target: pre-compile
+# Pre-compiles gems and static assets
+################################################################################
+.PHONY: pre-compile
+pre-compile: clear build-image
+	@make run STAGE='build' CMD='bundle _2.2.17_ install --jobs=4 --retry=3'
+	@make run STAGE='build' CMD='bundle _2.2.17_ exec rake assets:precompile'
+################################################################################
+# Target: test
+# Pre-compiles gems and static assets
+################################################################################
+.PHONY: test
+test: clear test-image
+	@make run STAGE='test' CMD='bundle _2.2.17_ install --jobs=4 --retry=3'
+	@make run STAGE='test' CMD='bundle _2.2.17_ exec rake test'
+################################################################################
+# Target: release
+# Creates a new release of the project.
+################################################################################
+.PHONY: release
+release: clear test pre-compile build
+################################################################################
+# Target: build
+# Builds a new image
+################################################################################
+build:
+	@make hadolint && \
+	DOCKER_BUILDKIT=1 docker build -t ${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} \
 		--build-arg RUBY_VERSION=${RUBY_VERSION} \
 		--build-arg ALPINE_VERSION=${ALPINE_VERSION} \
 		--build-arg USER=${USER} \
 		--build-arg UID=${UID} \
 		--build-arg GID=${GID} \
-		--build-arg SECRET_KEY_BASE=${SECRET_KEY_BASE} \
 		.
 ################################################################################
-# Target: test
+# Target: test-image
 # Run the tests inside a new version of the image. It will be tagged with the
 # current version of the project. The base image will use the version of Ruby
 # defined on the `.ruby-version` file at the root of this project.
 ################################################################################
-.PHONY: test
-test: clear
-	@DOCKER_BUILDKIT=1 docker build -t ${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} \
+.PHONY: test-image
+test-image: clear
+	@DOCKER_BUILDKIT=1 docker build -t ${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION}-test \
 		--target=test \
 		--build-arg RUBY_VERSION=${RUBY_VERSION} \
 		--build-arg ALPINE_VERSION=${ALPINE_VERSION} \
@@ -50,8 +99,36 @@ test: clear
 		--build-arg GID=${GID} \
 		.
 ################################################################################
+# Target: build-image
+# Creates a build image to precompile assets
+################################################################################
+.PHONY: build-image
+build-image: clear
+	@DOCKER_BUILDKIT=1 docker build -t ${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION}-build \
+		--target=build \
+		--build-arg RUBY_VERSION=${RUBY_VERSION} \
+		--build-arg ALPINE_VERSION=${ALPINE_VERSION} \
+		--build-arg USER=${USER} \
+		--build-arg UID=${UID} \
+		--build-arg GID=${GID} \
+		.
+################################################################################
+# Target: grype
+# Runs grype over the built image
+################################################################################
+.PHONY: grype
+grype:
+	@grype ${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} -o table
+################################################################################
+# Target: hadolint
+# Runs hadolint over the built image
+################################################################################
+.PHONY: hadolint
+hadolint:
+	@hadolint Dockerfile
+################################################################################
 # Target: scan
-# Scan the image for known vulnerabilities. Should be run after each build.
+# Scan the image for known vulnerabilities.
 ################################################################################
 .PHONY: scan
 scan: clear
@@ -71,36 +148,16 @@ postgres: clear
 ################################################################################
 .PHONY: db-migrate
 db-migrate: clear
-	docker run -it --rm \
-		--network ${PROJECT_NAME} \
-		--name rails-db-migrate \
-		--env-file ./.env \
-		${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} \
-		bundle exec rake db:migrate
+	@make run DOCKER_NETWORK=${PROJECT_NAME} STAGE='build' CMD='bundle _2.2.17_ exec rake db:migrate'
+
 ################################################################################
 # Target: db-seed
 # Run the `rake db:seed` task from the built image.
 ################################################################################
 .PHONY: db-seed
 db-seed: clear
-	docker run -it --rm \
-		--network ${PROJECT_NAME} \
-		--name rails-db-seed \
-		--env-file ./.env \
-		${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} \
-		bundle exec rake db:seed
-################################################################################
-# Target: exec
-# Runs a container from the created image and executes into it.
-# Can be used to troubleshoot problems inside the image.
-################################################################################
-.PHONY: exec
-exec: clear
-	docker run -it --rm \
-		--name rails-db-exec \
-		--env-file ./.env \
-		${ORGANIZATION}/${PROJECT_NAME}:${PROJECT_VERSION} \
-		/bin/sh
+	@make run DOCKER_NETWORK=${PROJECT_NAME} STAGE='build' CMD='bundle _2.2.17_ exec rake db:seed'
+
 ################################################################################
 # Target: setup
 # Starts up a PostgreSQL, Redis, and App container to test the application

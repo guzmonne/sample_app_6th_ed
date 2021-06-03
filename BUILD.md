@@ -24,7 +24,7 @@ Here is a template of the `.env` file that you should create:
 ###############################################################################
 # Project Variables
 ###############################################################################
-ORGANIZATION=
+ORGANIZATION=sample_app
 PROJECT_NAME=sample_app
 PROJECT_VERSION=1.0.0
 INTERFACE=0.0.0.0
@@ -47,24 +47,20 @@ UID=1000
 GID=1000
 
 ###############################################################################
-# Node Variables
+# Bundle Variables
 ###############################################################################
-NODE_ENV=production
+BUNDLE_RETRY=3
+BUNDLE_JOBS=4
+BUNDLE_PATH=vendor/cache
 
 ###############################################################################
 # Rails Variables
 ###############################################################################
-RAILS_ENV=production
 RAILS_MAX_THREADS=2
 RAILS_MIN_THREADS=1
 RAILS_SERVE_STATIC_FILES=true
 RAILS_LOG_TO_STDOUT=true
 SECRET_KEY_BASE=secret
-
-###############################################################################
-# Rack Variables
-###############################################################################
-RACK_ENV=production
 
 ###############################################################################
 # AWS Variables
@@ -78,7 +74,7 @@ AWS_BUCKET=
 # Database Variables
 ###############################################################################
 DATABASE_ENCODING=unicode
-DATABASE_URL=postgresql://postgres/
+DATABASE_HOST=postgres
 DATABASE_NAME=sample_app_production
 DATABASE_USERNAME=sample_app
 DATABASE_PASSWORD=sample_app_password
@@ -86,12 +82,12 @@ DATABASE_PASSWORD=sample_app_password
 ###############################################################################
 # SMTP Variables
 ###############################################################################
-SMTP_ADDRESS=email-smtp.us-east-1.amazonaws.com
-SMTP_PORT=587
-SMTP_AUTHENTICATION=login
+SMTP_ADDRESS=
+SMTP_PORT=
+SMTP_AUTHENTICATION=
 SMTP_USERNAME=
 SMTP_PASSWORD=
-SMTP_DOMAIN=
+SMTP_DOMAIN=c
 SMTP_FROM=
 
 ###############################################################################
